@@ -14,7 +14,9 @@ import (
 	"github.com/anchore/syft/syft/pkg/cataloger/generic"
 )
 
-var _ generic.Parser = parseDotnetDeps
+type dotnetDepsCataloger struct {
+	licenses nugetLicenses
+}
 
 type dotnetDeps struct {
 	RuntimeTarget dotnetRuntimeTarget                    `json:"runtimeTarget"`
@@ -39,7 +41,7 @@ type dotnetDepsLibrary struct {
 }
 
 //nolint:funlen
-func parseDotnetDeps(_ context.Context, _ file.Resolver, _ *generic.Environment, reader file.LocationReadCloser) ([]pkg.Package, []artifact.Relationship, error) {
+func (c *dotnetDepsCataloger) parseDotnetDeps(_ context.Context, resolver file.Resolver, _ *generic.Environment, reader file.LocationReadCloser) ([]pkg.Package, []artifact.Relationship, error) {
 	var pkgs []pkg.Package
 	var pkgMap = make(map[string]pkg.Package)
 	var relationships []artifact.Relationship
@@ -64,6 +66,8 @@ func parseDotnetDeps(_ context.Context, _ file.Resolver, _ *generic.Environment,
 				lib,
 				reader.Location.WithAnnotation(pkg.EvidenceAnnotationKey, pkg.PrimaryEvidenceAnnotation),
 			)
+			rootPkg.FoundBy = dotnetDepsCatalogerName
+			break
 		}
 	}
 	if rootPkg == nil {
@@ -93,10 +97,15 @@ func parseDotnetDeps(_ context.Context, _ file.Resolver, _ *generic.Environment,
 			reader.Location.WithAnnotation(pkg.EvidenceAnnotationKey, pkg.PrimaryEvidenceAnnotation),
 		)
 
-		if dotnetPkg != nil {
-			pkgs = append(pkgs, *dotnetPkg)
-			pkgMap[nameVersion] = *dotnetPkg
+		dotnetPkg.FoundBy = dotnetDepsCatalogerName
+
+		// Try to resolve *.nupkg License
+		if licenses, err := c.licenses.getLicenses(name, version, resolver); err == nil && len(licenses) > 0 {
+			dotnetPkg.Licenses = pkg.NewLicenseSet(licenses...)
 		}
+
+		pkgs = append(pkgs, *dotnetPkg)
+		pkgMap[nameVersion] = *dotnetPkg
 	}
 
 	for pkgNameVersion, target := range depsDoc.Targets[depsDoc.RuntimeTarget.Name] {
