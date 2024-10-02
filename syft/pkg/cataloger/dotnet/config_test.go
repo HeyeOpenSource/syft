@@ -9,10 +9,14 @@ import (
 
 func Test_Config(t *testing.T) {
 	type opts struct {
-		local     bool
-		remote    bool
-		providers string
+		local     *bool
+		remote    *bool
+		providers *string
 	}
+
+	trueVal := true
+	falseVal := false
+	optProvider := "https://www.nuget.org/api/v2/package"
 
 	homedirCacheDisabled := homedir.DisableCache
 	homedir.DisableCache = true
@@ -65,9 +69,9 @@ func Test_Config(t *testing.T) {
 				"NUGET_PACKAGE_PROVIDERS":      "https://my.proxy",
 			},
 			opts: opts{
-				local:     false,
-				remote:    true,
-				providers: "https://www.nuget.org/api/v2/package",
+				local:     &falseVal,
+				remote:    &trueVal,
+				providers: &optProvider,
 			},
 			expected: CatalogerConfig{
 				SearchLocalLicenses:  false,
@@ -85,10 +89,17 @@ func Test_Config(t *testing.T) {
 			for k, v := range test.env {
 				t.Setenv(k, v)
 			}
-			got := DefaultCatalogerConfig().
-				WithSearchLocalLicenses(test.opts.local).
-				WithSearchRemoteLicenses(test.opts.remote).
-				WithProviders(test.opts.providers)
+			got := DefaultCatalogerConfig()
+
+			if test.opts.local != nil {
+				got = got.WithSearchLocalLicenses(*test.opts.local)
+			}
+			if test.opts.remote != nil {
+				got = got.WithSearchRemoteLicenses(*test.opts.remote)
+			}
+			if test.opts.providers != nil {
+				got = got.WithProviders(*test.opts.providers)
+			}
 
 			assert.Equal(t, test.expected, got)
 		})
