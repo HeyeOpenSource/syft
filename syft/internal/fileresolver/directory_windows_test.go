@@ -53,6 +53,48 @@ func Test_windowsToPosix(t *testing.T) {
 			},
 			wantPosixPath: "/c/ふー/バー",
 		},
+		{
+			name: "basic relative case",
+			args: args{
+				windowsPath: `some\windows\place`,
+			},
+			wantPosixPath: "some/windows/place",
+		},
+		{
+			name: "escaped relative case",
+			args: args{
+				windowsPath: `some\\windows\\place`,
+			},
+			wantPosixPath: "some/windows/place",
+		},
+		{
+			name: "forward relative slash",
+			args: args{
+				windowsPath: `foo/bar`,
+			},
+			wantPosixPath: "foo/bar",
+		},
+		{
+			name: "mix relative slash",
+			args: args{
+				windowsPath: `foo/bar\`,
+			},
+			wantPosixPath: "foo/bar",
+		},
+		{
+			name: "case sensitive relative case",
+			args: args{
+				windowsPath: `Foo/bAr\`,
+			},
+			wantPosixPath: "Foo/bAr",
+		},
+		{
+			name: "special char relative case",
+			args: args{
+				windowsPath: `ふー\バー`,
+			},
+			wantPosixPath: "ふー/バー",
+		},
 	}
 
 	for _, tt := range tests {
@@ -85,28 +127,28 @@ func Test_posixToWindows(t *testing.T) {
 			args: args{
 				posixPath: "/c/some/windows/place",
 			},
-			wantWindowsPath: `C:\\some\\windows\\place`,
+			wantWindowsPath: `C:\some\windows\place`,
 		},
 		{
 			name: "forward slash",
 			args: args{
 				posixPath: "/c/foo/bar",
 			},
-			wantWindowsPath: `C:/foo/bar`,
+			wantWindowsPath: `C:\foo\bar`,
 		},
 		{
 			name: "mix slash",
 			args: args{
 				posixPath: "/c/foo/bar",
 			},
-			wantWindowsPath: `C:\foo/bar\`,
+			wantWindowsPath: `C:\foo\bar`,
 		},
 		{
 			name: "case sensitive case",
 			args: args{
 				posixPath: "/c/Foo/bAr",
 			},
-			wantWindowsPath: `C:\Foo/bAr\`,
+			wantWindowsPath: `C:\Foo\bAr`,
 		},
 		{
 			name: "special char case",
@@ -114,6 +156,62 @@ func Test_posixToWindows(t *testing.T) {
 				posixPath: "/c/ふー/バー",
 			},
 			wantWindowsPath: `C:\ふー\バー`,
+		},
+		{
+			name: "basic relative case",
+			args: args{
+				posixPath: "some/windows/place",
+			},
+			wantWindowsPath: `some\windows\place`,
+		},
+		{
+			name: "escaped relative case",
+			args: args{
+				posixPath: "some/windows/place",
+			},
+			wantWindowsPath: `some\windows\place`,
+		},
+		{
+			name: "forward relative slash",
+			args: args{
+				posixPath: "foo/bar",
+			},
+			wantWindowsPath: `foo\bar`,
+		},
+		{
+			name: "mix relative slash",
+			args: args{
+				posixPath: "foo/bar",
+			},
+			wantWindowsPath: `foo\bar`,
+		},
+		{
+			name: "case sensitive relative case",
+			args: args{
+				posixPath: "Foo/bAr",
+			},
+			wantWindowsPath: `Foo\bAr`,
+		},
+		{
+			name: "special char relative case",
+			args: args{
+				posixPath: "ふー/バー",
+			},
+			wantWindowsPath: `ふー\バー`,
+		},
+		{
+			name: "leading slash relative case",
+			args: args{
+				posixPath: "/some/windows/place",
+			},
+			wantWindowsPath: `\some\windows\place`,
+		},
+		{
+			name: "leading slash non-drive relative case",
+			args: args{
+				posixPath: "/1/some/windows/place",
+			},
+			wantWindowsPath: `\1\some\windows\place`,
 		},
 	}
 	for _, tt := range tests {
