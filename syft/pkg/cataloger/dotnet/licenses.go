@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -23,18 +24,18 @@ import (
 )
 
 type nugetLicenses struct {
-	catalogerName          string
-	opts                   CatalogerConfig
-	localModCacheResolvers []file.Resolver
-	lowerLicenseFileNames  *strset.Set
+	catalogerName            string
+	opts                     CatalogerConfig
+	localNuGetCacheResolvers []file.Resolver
+	lowerLicenseFileNames    *strset.Set
 }
 
 func newNugetLicenses(catalogerName string, opts CatalogerConfig) nugetLicenses {
 	return nugetLicenses{
-		catalogerName:          catalogerName,
-		opts:                   opts,
-		localModCacheResolvers: nil,
-		lowerLicenseFileNames:  strset.New(lowercaseLicenseFiles()...),
+		catalogerName:            catalogerName,
+		opts:                     opts,
+		localNuGetCacheResolvers: nil,
+		lowerLicenseFileNames:    strset.New(lowercaseLicenseFiles()...),
 	}
 }
 
@@ -49,16 +50,16 @@ func lowercaseLicenseFiles() []string {
 func (c *nugetLicenses) getLicenses(moduleName, moduleVersion string, resolver file.Resolver) ([]pkg.License, error) {
 	licenses := []pkg.License{}
 
-	if c.opts.SearchNuGetLicenses {
-		if c.localModCacheResolvers == nil {
+	if c.opts.SearchLocalLicenses {
+		if c.localNuGetCacheResolvers == nil {
 			// Try to determine nuget package folder resolverss
-			c.localModCacheResolvers = getLocalNugetFolderResolvers(resolver)
+			c.localNuGetCacheResolvers = getLocalNugetFolderResolvers(resolver)
 		}
 
 		// if we're running against a directory on the filesystem, it may not include the
 		// user's homedir, so we defer to using the localModCacheResolver
-		for _, resolver := range c.localModCacheResolvers {
-			if lics, err := c.findLicenses(resolver, moduleSearchGlob(moduleName, moduleVersion)); err == nil && len(lics) > 0 {
+		for _, resolver := range c.localNuGetCacheResolvers {
+			if lics, err := c.findLocalLicenses(resolver, moduleSearchGlob(moduleName, moduleVersion)); err == nil && len(lics) > 0 {
 				for _, lic := range lics {
 					found := false
 					for _, known := range licenses {
@@ -75,22 +76,22 @@ func (c *nugetLicenses) getLicenses(moduleName, moduleVersion string, resolver f
 				}
 			}
 		}
+	}
 
-		if c.opts.SearchRemoteLicenses {
-			if lics, err := c.findRemoteLicenses(moduleName, moduleVersion); err == nil {
-				for _, lic := range lics {
-					found := false
-					for _, known := range licenses {
-						if known.Value == lic.Value &&
-							known.SPDXExpression == lic.SPDXExpression &&
-							known.Type == lic.Type {
-							found = true
-							break
-						}
+	if c.opts.SearchRemoteLicenses {
+		if lics, err := c.findRemoteLicenses(moduleName, moduleVersion); err == nil {
+			for _, lic := range lics {
+				found := false
+				for _, known := range licenses {
+					if known.Value == lic.Value &&
+						known.SPDXExpression == lic.SPDXExpression &&
+						known.Type == lic.Type {
+						found = true
+						break
 					}
-					if !found {
-						licenses = append(licenses, lic)
-					}
+				}
+				if !found {
+					licenses = append(licenses, lic)
 				}
 			}
 		}
@@ -101,12 +102,6 @@ func (c *nugetLicenses) getLicenses(moduleName, moduleVersion string, resolver f
 		err = errors.New("no licenses found")
 	}
 	return licenses, err
-}
-
-func (c *nugetLicenses) findLicenses(resolver file.Resolver, globMatch string) (out []pkg.License, err error) {
-	out, err = c.findLocalLicenses(resolver, globMatch)
-
-	return out, err
 }
 
 func (c *nugetLicenses) findLocalLicenses(resolver file.Resolver, globMatch string) (out []pkg.License, err error) {
@@ -315,15 +310,47 @@ type nugetPackageFolders struct {
 }
 
 func getLocalNugetFolderResolvers(resolver file.Resolver) []file.Resolver {
-	// Try to determine nuget package folders from temporary object files
 	nugetPackagePaths := []string{}
-	if assetFiles, err := resolver.FilesByGlob("**/obj/project.assets.json"); err == nil && len(assetFiles) > 0 {
-		for _, assetFile := range assetFiles {
-			if contentReader, err := resolver.FileContentsByLocation(assetFile); err == nil {
-				if assetFileData, err := io.ReadAll(contentReader); err == nil {
-					folders := nugetPackageFolders{}
-					if err = json.Unmarshal(assetFileData, &folders); err == nil {
-						for folder := range folders.PackageFolders {
+	if injectedCachePath := os.Getenv("TEST_PARSE_DOTNET_DEPS_INJECT_CACHE_LOCATION"); injectedCachePath != "" {
+		nugetPackagePaths = append(nugetPackagePaths, injectedCachePath)
+	} else {
+		// Try to determine nuget package folders from temporary object files
+		if assetFiles, err := resolver.FilesByGlob("**/obj/project.assets.json"); err == nil && len(assetFiles) > 0 {
+			for _, assetFile := range assetFiles {
+				if contentReader, err := resolver.FileContentsByLocation(assetFile); err == nil {
+					if assetFileData, err := io.ReadAll(contentReader); err == nil {
+						folders := nugetPackageFolders{}
+						if err = json.Unmarshal(assetFileData, &folders); err == nil {
+							for folder := range folders.PackageFolders {
+								found := false
+								for _, known := range nugetPackagePaths {
+									if known == folder {
+										found = true
+										break
+									}
+								}
+								if !found {
+									nugetPackagePaths = append(nugetPackagePaths, folder)
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Query nuget itself for its cache locations
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		// cf. https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-nuget-locals
+		cmd := exec.CommandContext(ctx, "dotnet", "nuget", "locals", "all", "-l", "--force-english-output")
+		if stdout, err := cmd.StdoutPipe(); err == nil {
+			if err := cmd.Start(); err == nil {
+				if data, err := io.ReadAll(stdout); err == nil {
+					lines := strings.Split(string(data), "\n")
+					for _, line := range lines {
+						line = strings.TrimSpace(line)
+						if lineParts := strings.Split(line, ": "); len(lineParts) == 2 {
+							folder := lineParts[1]
 							found := false
 							for _, known := range nugetPackagePaths {
 								if known == folder {
@@ -339,34 +366,8 @@ func getLocalNugetFolderResolvers(resolver file.Resolver) []file.Resolver {
 				}
 			}
 		}
+		cancel()
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	cmd := exec.CommandContext(ctx, "dotnet", "nuget", "locals", "all", "-l", "--force-english-output")
-	if stdout, err := cmd.StdoutPipe(); err == nil {
-		if err := cmd.Start(); err == nil {
-			if data, err := io.ReadAll(stdout); err == nil {
-				lines := strings.Split(string(data), "\n")
-				for _, line := range lines {
-					line = strings.TrimSpace(line)
-					if lineParts := strings.Split(line, ": "); len(lineParts) == 2 {
-						folder := lineParts[1]
-						found := false
-						for _, known := range nugetPackagePaths {
-							if known == folder {
-								found = true
-								break
-							}
-						}
-						if !found {
-							nugetPackagePaths = append(nugetPackagePaths, folder)
-						}
-					}
-				}
-			}
-		}
-	}
-	cancel()
 
 	resolvers := []file.Resolver{}
 	if len(nugetPackagePaths) > 0 {

@@ -9,6 +9,7 @@ import (
 
 func Test_Config(t *testing.T) {
 	type opts struct {
+		local     bool
 		remote    bool
 		providers string
 	}
@@ -21,8 +22,9 @@ func Test_Config(t *testing.T) {
 
 	allEnv := map[string]string{
 		"HOME":                         "/usr/home",
-		"NUGET_PACKAGE_PROVIDERS":      "",
+		"NUGET_SEARCH_LOCAL_LICENSES":  "",
 		"NUGET_SEARCH_REMOTE_LICENSES": "",
+		"NUGET_PACKAGE_PROVIDERS":      "",
 	}
 
 	tests := []struct {
@@ -36,6 +38,7 @@ func Test_Config(t *testing.T) {
 			env:  map[string]string{},
 			opts: opts{},
 			expected: CatalogerConfig{
+				SearchLocalLicenses:  false,
 				SearchRemoteLicenses: false,
 				Providers:            []string{"https://www.nuget.org/api/v2/package"},
 			},
@@ -43,11 +46,13 @@ func Test_Config(t *testing.T) {
 		{
 			name: "set via env defaults",
 			env: map[string]string{
-				"NUGET_PACKAGE_PROVIDERS":      "https://my.proxy",
+				"NUGET_SEARCH_LOCAL_LICENSES":  "true",
 				"NUGET_SEARCH_REMOTE_LICENSES": "false",
+				"NUGET_PACKAGE_PROVIDERS":      "https://my.proxy",
 			},
 			opts: opts{},
 			expected: CatalogerConfig{
+				SearchLocalLicenses:  true,
 				SearchRemoteLicenses: false,
 				Providers:            []string{"https://my.proxy"},
 			},
@@ -55,14 +60,17 @@ func Test_Config(t *testing.T) {
 		{
 			name: "set via configuration",
 			env: map[string]string{
+				"NUGET_SEARCH_LOCAL_LICENSES":  "true",
+				"NUGET_SEARCH_REMOTE_LICENSES": "false",
 				"NUGET_PACKAGE_PROVIDERS":      "https://my.proxy",
-				"NUGET_SEARCH_REMOTE_LICENSES": "true",
 			},
 			opts: opts{
+				local:     false,
 				remote:    true,
 				providers: "https://www.nuget.org/api/v2/package",
 			},
 			expected: CatalogerConfig{
+				SearchLocalLicenses:  false,
 				SearchRemoteLicenses: true,
 				Providers:            []string{"https://www.nuget.org/api/v2/package"},
 			},
@@ -78,6 +86,7 @@ func Test_Config(t *testing.T) {
 				t.Setenv(k, v)
 			}
 			got := DefaultCatalogerConfig().
+				WithSearchLocalLicenses(test.opts.local).
 				WithSearchRemoteLicenses(test.opts.remote).
 				WithProviders(test.opts.providers)
 

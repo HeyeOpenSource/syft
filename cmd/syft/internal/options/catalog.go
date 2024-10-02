@@ -157,7 +157,7 @@ func (cfg Catalog) ToPackagesConfig() pkgcataloging.Config {
 					WithFromLDFlags(cfg.Golang.MainModuleVersion.FromLDFlags),
 			),
 		DotNet: dotnet.DefaultCatalogerConfig().
-			WithSearchNuGetLicenses(cfg.DotNet.SearchNuGetLicenses).
+			WithSearchLocalLicenses(cfg.DotNet.SearchLocalLicenses).
 			WithSearchRemoteLicenses(cfg.DotNet.SearchRemoteLicenses).
 			WithProviders(cfg.DotNet.Providers),
 		JavaScript: javascript.DefaultCatalogerConfig().

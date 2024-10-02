@@ -1,6 +1,7 @@
 package dotnet
 
 import (
+	"os"
 	"testing"
 
 	"github.com/anchore/syft/syft/artifact"
@@ -8,11 +9,16 @@ import (
 	"github.com/anchore/syft/syft/license"
 	"github.com/anchore/syft/syft/pkg"
 	"github.com/anchore/syft/syft/pkg/cataloger/internal/pkgtest"
+	"github.com/anchore/syft/syft/source"
+	"github.com/anchore/syft/syft/source/directorysource"
 )
 
 func TestParseDotnetDeps(t *testing.T) {
 	fixture := "test-fixtures/TestLibrary.deps.json"
-	fixtureLocationSet := file.NewLocationSet(file.NewLocation(fixture))
+	s, _ := directorysource.NewFromPath("test-fixtures")
+	resolver, _ := s.FileResolver(source.AllLayersScope)
+	fixtureLocations, _ := resolver.FilesByGlob("**/TestLibrary.deps.json")
+	fixtureLocationSet := file.NewLocationSet(fixtureLocations...)
 	rootPkg := pkg.Package{
 		Name:      "TestLibrary",
 		Version:   "1.0.0",
@@ -241,7 +247,8 @@ func TestParseDotnetDeps(t *testing.T) {
 			Sha512:   "sha512-/iUeP3tq1S0XdNNoMz5C9twLSrM/TH+qElHkXWaPvuNOt+99G75NrV0OS2EqHx5wMN7popYjpc8oTjC1y16DLg==",
 			Path:     "system.runtime.compilerservices.unsafe/6.0.0",
 			HashPath: "system.runtime.compilerservices.unsafe.6.0.0.nupkg.sha512",
-		}}
+		},
+	}
 
 	expectedPkgs := []pkg.Package{
 		awssdkcore,
@@ -383,11 +390,13 @@ func TestParseDotnetDeps(t *testing.T) {
 	}
 
 	t.Run(fixture, func(t *testing.T) {
+		os.Setenv("TEST_PARSE_DOTNET_DEPS_INJECT_CACHE_LOCATION", "test-fixtures/NuGetCache")
+		defer os.Setenv("TEST_PARSE_DOTNET_DEPS_INJECT_CACHE_LOCATION", "")
 		pkgtest.NewCatalogTester().
 			FromDirectory(t, "test-fixtures").
 			Expects(expectedPkgs, expectedRelationships).
 			TestCataloger(t, NewDotnetDepsCataloger(CatalogerConfig{
-				SearchNuGetLicenses: true,
+				SearchLocalLicenses: true,
 			}))
 	})
 }

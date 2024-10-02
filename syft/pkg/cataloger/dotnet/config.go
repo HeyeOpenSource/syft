@@ -17,7 +17,7 @@ const (
 )
 
 type CatalogerConfig struct {
-	SearchNuGetLicenses  bool     `yaml:"search-nuget-licenses" json:"search-nuget-licenses" mapstructure:"search-nuget-licenses"`
+	SearchLocalLicenses  bool     `yaml:"search-nuget-licenses" json:"search-nuget-licenses" mapstructure:"search-nuget-licenses"`
 	SearchRemoteLicenses bool     `yaml:"search-remote-licenses" json:"search-remote-licenses" mapstructure:"search-remote-licenses"`
 	Providers            []string `yaml:"package-providers,omitempty" json:"package-providers,omitempty" mapstructure:"package-providers"`
 }
@@ -29,7 +29,17 @@ type CatalogerConfig struct {
 func DefaultCatalogerConfig() CatalogerConfig {
 	g := CatalogerConfig{}
 
-	// first process the proxy settings
+	nuget := os.Getenv("NUGET_SEARCH_LOCAL_LICENSES")
+	if value, err := strconv.ParseBool(nuget); err == nil {
+		g = g.WithSearchLocalLicenses(value)
+	}
+
+	remote := os.Getenv("NUGET_SEARCH_REMOTE_LICENSES")
+	if value, err := strconv.ParseBool(remote); err == nil {
+		g = g.WithSearchRemoteLicenses(value)
+	}
+
+	// process the proxy settings (for remote search)
 	if len(g.Providers) == 0 {
 		nugetProviders := os.Getenv("NUGET_PACKAGE_PROVIDERS")
 		if nugetProviders == "" {
@@ -38,26 +48,16 @@ func DefaultCatalogerConfig() CatalogerConfig {
 		g = g.WithProviders(nugetProviders)
 	}
 
-	remote := os.Getenv("NUGET_SEARCH_REMOTE_LICENSES")
-	if value, err := strconv.ParseBool(remote); err == nil {
-		g = g.WithSearchRemoteLicenses(value)
-	}
+	return g
+}
 
-	nuget := os.Getenv("NUGET_SEARCH_NUGET_LICENSES")
-	if value, err := strconv.ParseBool(nuget); err == nil {
-		g = g.WithSearchNuGetLicenses(value)
-	}
-
+func (g CatalogerConfig) WithSearchLocalLicenses(input bool) CatalogerConfig {
+	g.SearchLocalLicenses = input
 	return g
 }
 
 func (g CatalogerConfig) WithSearchRemoteLicenses(input bool) CatalogerConfig {
 	g.SearchRemoteLicenses = input
-	return g
-}
-
-func (g CatalogerConfig) WithSearchNuGetLicenses(input bool) CatalogerConfig {
-	g.SearchNuGetLicenses = input
 	return g
 }
 

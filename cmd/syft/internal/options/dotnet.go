@@ -7,7 +7,7 @@ import (
 )
 
 type dotnetConfig struct {
-	SearchNuGetLicenses  bool   `yaml:"search-nuget-licenses" json:"search-nuget-licenses" mapstructure:"search-nuget-licenses"`
+	SearchLocalLicenses  bool   `yaml:"search-local-licenses" json:"search-local-licenses" mapstructure:"search-local-licenses"`
 	SearchRemoteLicenses bool   `yaml:"search-remote-licenses" json:"search-remote-licenses" mapstructure:"search-remote-licenses"`
 	Providers            string `yaml:"package-providers,omitempty" json:"package-providers,omitempty" mapstructure:"package-providers"`
 }
@@ -15,7 +15,7 @@ type dotnetConfig struct {
 func defaultDotnetConfig() dotnetConfig {
 	def := dotnet.DefaultCatalogerConfig()
 	return dotnetConfig{
-		SearchNuGetLicenses:  def.SearchNuGetLicenses,
+		SearchLocalLicenses:  def.SearchLocalLicenses,
 		SearchRemoteLicenses: def.SearchRemoteLicenses,
 		Providers:            strings.Join(def.Providers, ","),
 	}
